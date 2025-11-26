@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Registration {
+  id              String   @id @default(cuid())
+  userId          String
+  workshopId      String
+  registeredAt    DateTime @default(now())
+  
+  // Payment fields
+  paid            Boolean  @default(false)
+  paymentId       String?  // Razorpay payment ID or pickup reference
+  razorpayOrderId String?  // Razorpay order ID
+  pricePaid       Float?   // Actual amount paid
+  paymentMethod   String?  // "razorpay" or "pickup"
+  paymentStatus   String?  // "pending", "completed", "failed"
+  
+  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Workshop        Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  seats           Int      @default(1)
+  @@unique([userId, workshopId])
+  @@index([userId])
+  @@index([workshopId])
+  @@index([paymentId])
+  @@index([razorpayOrderId])
+}
+
+model User {
+  id           String         @id
+  email        String         @unique
+  name         String?
+  phoneno      String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  Registration Registration[]
+
+  @@index([email])
+}
+
+model Workshop {
+  id             String         @id
+  title          String
+  description    String
+  date           DateTime
+  time           String
+  location       String
+  totalSeats     Int
+  availableSeats Int
+  price          Int
+  discount       Int            @default(0)
+  thumbnail      String
+  isOpen         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  Registration   Registration[]
+
+  @@index([date])
+}
