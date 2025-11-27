@@ -9,9 +9,7 @@ export async function GetActiveWorkshops() {
     const workshops = await prisma.workshop.findMany({
       where: {
         isOpen: true,
-        date: {
-          gte: new Date(),
-        },
+      
       },
       orderBy: {
         date: "asc",
