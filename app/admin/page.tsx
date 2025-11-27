@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 const prisma = new PrismaClient()
+export const dynamic = "force-dynamic";
 
 async function getDashboardStats() {
   const [
