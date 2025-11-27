@@ -1,52 +1,26 @@
-// workshops/[id]/page.tsx
+import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { auth } from "@/auth";
-import { GetWorkshopById, CheckUserRegistration } from "@/app/(clientside)/actions/workshops";
-import { WorkshopDetail } from "@/app/(clientside)/components/workshopdetails";
+import WorkshopForm from "../../../components/workshopform"
 
-// Cache this page and revalidate every 30 seconds (for seat availability)
-export const revalidate = 30;
-
-// Generate static params for all workshops at build time
-export async function generateStaticParams() {
-  // You can optionally fetch workshop IDs here for static generation
-  // For now, we'll rely on dynamic rendering
-  return [];
+interface PageProps {
+  params: Promise<{ id: string }>;
 }
 
-interface WorkshopPageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-export default async function WorkshopPage({ params }: WorkshopPageProps) {
-  const session = await auth();
+export default async function EditWorkshopPage({ params }: PageProps) {
+  // Await params in Next.js 15
   const { id } = await params;
-  const workshop = await GetWorkshopById(id);
+
+  const workshop = await prisma.workshop.findUnique({
+    where: { id },
+  });
 
   if (!workshop) {
     notFound();
   }
 
-  let isRegistered = false;
-  let userRegistration = null;
-
-  if (session?.user?.email) {
-    const registration = await CheckUserRegistration(
-      session.user.email,
-      id
-    );
-    isRegistered = !!registration;
-    userRegistration = registration;
-  }
-
   return (
-    <WorkshopDetail
-      workshop={workshop}
-      isRegistered={isRegistered}
-      userRegistration={userRegistration}
-      userEmail={session?.user?.email || null}
-    />
+    <div className="container mx-auto py-10">
+      <WorkshopForm initialData={workshop} />
+    </div>
   );
 }

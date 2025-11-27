@@ -3,7 +3,7 @@
 import Navbar from "./components/nav"
 import { WhatsAppFloat } from "./components/whatsapp"
 
-export const dynamic = "force-dynamic";
+
 export default function AdminLayout({
   children,
 }: {
