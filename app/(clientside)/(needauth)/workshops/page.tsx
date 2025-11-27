@@ -1,19 +1,22 @@
+// workshops/page.tsx
 import { GetActiveWorkshops } from "../../actions/workshops";
-import { WorkshopCard } from "../../components/workcard"; // Assuming component is in same dir or adjust import
+import { WorkshopCard } from "../../components/workcard";
 import { ArrowDown } from "lucide-react";
+
+
 
 export default async function Workshops() {
   const workshops = await GetActiveWorkshops();
-
+  
   // Styles
   const BG_BLACK = "bg-black";
   const BORDER_COLOR = "border-neutral-800";
-
+  
   return (
     <div className={`min-h-screen ${BG_BLACK} text-white font-sans pt-24`}>
       {/* Background Grid Effect */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#171717_1px,transparent_1px),linear-gradient(to_bottom,#171717_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20 pointer-events-none" />
-
+      
       <div className="relative z-10">
         {/* Header Section */}
         <div className={`border-b ${BORDER_COLOR} pb-12`}>
@@ -30,16 +33,17 @@ export default async function Workshops() {
                   Secure your spot for upcoming sessions.
                 </p>
               </div>
+              
               <div className="col-span-12 md:col-span-6 flex justify-start md:justify-end mt-6 md:mt-0">
                 <div className="flex items-center gap-2 text-red-600">
-                   <ArrowDown className="w-5 h-5 animate-bounce" />
-                   <span className="uppercase tracking-widest text-xs font-bold">Select a Module</span>
+                  <ArrowDown className="w-5 h-5 animate-bounce" />
+                  <span className="uppercase tracking-widest text-xs font-bold">Select a Module</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
+        
         {/* Listing Grid */}
         <div className="container mx-auto px-4 py-12">
           {workshops.length === 0 ? (

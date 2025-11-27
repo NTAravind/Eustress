@@ -1,9 +1,9 @@
+// app/(clientside)/components/workshopdetails.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Workshop, Registration } from "@/app/generated/prisma";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +26,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import Image from "next/image";
-import { RegisterForWorkshop, CancelRegistration } from "@/app/(clientside)/actions/workshops";
+import { RegisterForWorkshop, CancelRegistration, GetWorkshopSeats } from "@/app/(clientside)/actions/workshops";
 import { useRouter } from "next/navigation";
 import { useWorkshopStore } from "@/lib/store";
 
@@ -50,10 +50,9 @@ interface WorkshopDetailProps {
 // Styles
 const BORDER_COLOR = "border-neutral-800";
 const BG_BLACK = "bg-black";
-const ACCENT_RED = "text-red-600";
 
 export function WorkshopDetail({
-  workshop,
+  workshop: initialWorkshop,
   isRegistered,
   userRegistration,
   userEmail,
@@ -61,17 +60,32 @@ export function WorkshopDetail({
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "pickup">("razorpay");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [availableSeats, setAvailableSeats] = useState(initialWorkshop.availableSeats);
   const router = useRouter();
 
   const { cart, updateQuantity, addToCart, removeFromCart } = useWorkshopStore();
-  const cartItem = cart[workshop.id];
+  const cartItem = cart[initialWorkshop.id];
   const quantity = cartItem?.quantity || 1;
 
-  const finalPrice = workshop.price - (workshop.price * workshop.discount) / 100;
-  const hasDiscount = workshop.discount > 0;
+  const finalPrice = initialWorkshop.price - (initialWorkshop.price * initialWorkshop.discount) / 100;
+  const hasDiscount = initialWorkshop.discount > 0;
   const occupancyPercentage =
-    ((workshop.totalSeats - workshop.availableSeats) / workshop.totalSeats) * 100;
-  const maxQuantity = Math.min(workshop.availableSeats, 10);
+    ((initialWorkshop.totalSeats - availableSeats) / initialWorkshop.totalSeats) * 100;
+  const maxQuantity = Math.min(availableSeats, 10);
+
+  // Poll for seat updates every 10 seconds
+  useEffect(() => {
+    const pollSeats = async () => {
+      const seats = await GetWorkshopSeats(initialWorkshop.id);
+      if (seats) {
+        setAvailableSeats(seats.availableSeats);
+      }
+    };
+
+    const interval = setInterval(pollSeats, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [initialWorkshop.id]);
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-IN", {
@@ -85,18 +99,24 @@ export function WorkshopDetail({
   const handleQuantityChange = (newQuantity: number) => {
     if (!cartItem) {
       addToCart({
-        workshopId: workshop.id,
-        title: workshop.title,
-        price: workshop.price,
-        discount: workshop.discount,
+        workshopId: initialWorkshop.id,
+        title: initialWorkshop.title,
+        price: initialWorkshop.price,
+        discount: initialWorkshop.discount,
         maxSeats: maxQuantity,
       });
     }
-    updateQuantity(workshop.id, newQuantity);
+    updateQuantity(initialWorkshop.id, newQuantity);
   };
 
-  // ... (Keep existing payment logic: handleRazorpayPayment, handlePickupPayment, handleRegister, handleCancel) ...
-    const handleRazorpayPayment = async () => {
+  const refreshSeats = async () => {
+    const seats = await GetWorkshopSeats(initialWorkshop.id);
+    if (seats) {
+      setAvailableSeats(seats.availableSeats);
+    }
+  };
+
+  const handleRazorpayPayment = async () => {
     setLoading(true);
 
     try {
@@ -105,7 +125,7 @@ export function WorkshopDetail({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workshopId: workshop.id,
+          workshopId: initialWorkshop.id,
           quantity,
         }),
       });
@@ -122,8 +142,8 @@ export function WorkshopDetail({
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.orderId,
-        name: workshop.title,
-        description: `${quantity} seat${quantity > 1 ? "s" : ""} for ${workshop.title}`,
+        name: initialWorkshop.title,
+        description: `${quantity} seat${quantity > 1 ? "s" : ""} for ${initialWorkshop.title}`,
         handler: async function (response: any) {
           try {
             // Verify payment
@@ -134,7 +154,7 @@ export function WorkshopDetail({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                workshopId: workshop.id,
+                workshopId: initialWorkshop.id,
                 quantity,
               }),
             });
@@ -145,8 +165,9 @@ export function WorkshopDetail({
               throw new Error(verifyData.error || "Payment verification failed");
             }
 
-            removeFromCart(workshop.id);
+            removeFromCart(initialWorkshop.id);
             setDialogOpen(false);
+            await refreshSeats(); // Refresh seats after successful payment
             alert("Payment successful! Registration completed.");
             router.refresh();
           } catch (error) {
@@ -181,12 +202,13 @@ export function WorkshopDetail({
 
   const handlePickupPayment = async () => {
     setLoading(true);
-    const result = await RegisterForWorkshop(workshop.id, "pickup", quantity);
+    const result = await RegisterForWorkshop(initialWorkshop.id, "pickup", quantity);
     setLoading(false);
 
     if (result?.success) {
-      removeFromCart(workshop.id);
+      removeFromCart(initialWorkshop.id);
       setDialogOpen(false);
+      await refreshSeats(); // Refresh seats after successful registration
       alert("Registration successful! Please pay at the venue.");
       router.refresh();
     } else {
@@ -196,7 +218,7 @@ export function WorkshopDetail({
 
   const handleRegister = async () => {
     if (!userEmail) {
-      router.push(`/login?callbackUrl=/workshops/${workshop.id}`);
+      router.push(`/login?callbackUrl=/workshops/${initialWorkshop.id}`);
       return;
     }
 
@@ -213,16 +235,16 @@ export function WorkshopDetail({
     }
 
     setLoading(true);
-    const result = await CancelRegistration(workshop.id);
+    const result = await CancelRegistration(initialWorkshop.id);
     setLoading(false);
 
     if (result.success) {
+      await refreshSeats(); // Refresh seats after cancellation
       router.refresh();
     } else {
       alert(result.error || "Cancellation failed");
     }
   };
-
 
   return (
     <div className={`min-h-screen ${BG_BLACK} text-white font-sans pt-20`}>
@@ -251,8 +273,8 @@ export function WorkshopDetail({
             {/* Hero Image Block */}
             <div className={`relative h-[400px] lg:h-[500px] w-full border-b ${BORDER_COLOR} group overflow-hidden`}>
               <Image
-                src={workshop.thumbnail}
-                alt={workshop.title}
+                src={initialWorkshop.thumbnail}
+                alt={initialWorkshop.title}
                 fill
                 className="object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
                 priority
@@ -261,14 +283,14 @@ export function WorkshopDetail({
               
               {/* Status Badge Overlay */}
               <div className="absolute top-6 right-6 flex gap-2">
-                {!workshop.isOpen && (
+                {!initialWorkshop.isOpen && (
                   <span className="bg-red-600 text-white px-3 py-1 text-xs font-bold uppercase tracking-widest">
                     Closed
                   </span>
                 )}
                 {hasDiscount && (
                    <span className="bg-white text-black px-3 py-1 text-xs font-bold uppercase tracking-widest">
-                    Save {workshop.discount}%
+                    Save {initialWorkshop.discount}%
                   </span>
                 )}
               </div>
@@ -276,7 +298,7 @@ export function WorkshopDetail({
               {/* Title Overlay */}
               <div className="absolute bottom-8 left-8 right-8">
                  <h1 className="text-4xl lg:text-6xl font-black uppercase leading-none tracking-tighter mb-2">
-                  {workshop.title}
+                  {initialWorkshop.title}
                 </h1>
               </div>
             </div>
@@ -285,7 +307,7 @@ export function WorkshopDetail({
             <div className="p-8 lg:p-12 flex-grow bg-black">
                <h2 className="text-xl font-bold uppercase text-red-600 mb-6 tracking-widest">Briefing</h2>
                <p className="text-lg text-neutral-300 leading-relaxed max-w-3xl">
-                 {workshop.description}
+                 {initialWorkshop.description}
                </p>
 
                {/* Registration Status Alert */}
@@ -316,7 +338,7 @@ export function WorkshopDetail({
                     <Calendar className="h-4 w-4 text-red-600" />
                     <span className="text-xs font-bold uppercase tracking-widest text-neutral-500">Date</span>
                  </div>
-                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{formatDate(workshop.date)}</p>
+                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{formatDate(initialWorkshop.date)}</p>
               </div>
 
               {/* Time */}
@@ -325,7 +347,7 @@ export function WorkshopDetail({
                     <Clock className="h-4 w-4 text-red-600" />
                     <span className="text-xs font-bold uppercase tracking-widest text-neutral-500">Time</span>
                  </div>
-                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{workshop.time}</p>
+                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{initialWorkshop.time}</p>
               </div>
 
               {/* Location */}
@@ -334,18 +356,18 @@ export function WorkshopDetail({
                     <MapPin className="h-4 w-4 text-red-600" />
                     <span className="text-xs font-bold uppercase tracking-widest text-neutral-500">Location</span>
                  </div>
-                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{workshop.location}</p>
+                 <p className="text-xl font-bold text-white group-hover:translate-x-1 transition-transform">{initialWorkshop.location}</p>
               </div>
 
-               {/* Capacity */}
+               {/* Capacity - Now using dynamic availableSeats */}
                <div className={`p-6 hover:bg-neutral-900 transition-colors`}>
                  <div className="flex items-center gap-3 mb-2">
                     <Users className="h-4 w-4 text-red-600" />
                     <span className="text-xs font-bold uppercase tracking-widest text-neutral-500">Capacity</span>
                  </div>
                  <div className="flex justify-between items-end mb-2">
-                   <span className="text-xl font-bold text-white">{workshop.availableSeats} Left</span>
-                   <span className="text-xs text-neutral-500">of {workshop.totalSeats}</span>
+                   <span className="text-xl font-bold text-white">{availableSeats} Left</span>
+                   <span className="text-xs text-neutral-500">of {initialWorkshop.totalSeats}</span>
                  </div>
                  <div className="w-full bg-neutral-800 h-1">
                     <div className="bg-red-600 h-1 transition-all" style={{ width: `${occupancyPercentage}%` }} />
@@ -356,7 +378,7 @@ export function WorkshopDetail({
             {/* Dynamic Pricing & Action Area */}
             <div className="p-8 flex-grow flex flex-col justify-end">
                
-               {!isRegistered && userEmail && workshop.availableSeats > 0 && workshop.isOpen && (
+               {!isRegistered && userEmail && availableSeats > 0 && initialWorkshop.isOpen && (
                   <div className="mb-8">
                     <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 block mb-4">Seat Selection</label>
                     <div className="flex items-center border border-neutral-800">
@@ -377,7 +399,7 @@ export function WorkshopDetail({
                  <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-black text-white tracking-tight">₹{(finalPrice * quantity).toLocaleString("en-IN")}</span>
                     {hasDiscount && (
-                       <span className="text-lg text-neutral-500 line-through decoration-red-600">₹{(workshop.price * quantity).toLocaleString("en-IN")}</span>
+                       <span className="text-lg text-neutral-500 line-through decoration-red-600">₹{(initialWorkshop.price * quantity).toLocaleString("en-IN")}</span>
                     )}
                  </div>
                  <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">Total including taxes</p>
@@ -404,16 +426,16 @@ export function WorkshopDetail({
                   <DialogTrigger asChild>
                     <Button
                       className="w-full rounded-none bg-red-600 text-white hover:bg-white hover:text-black uppercase font-bold py-6 tracking-wider transition-colors disabled:bg-neutral-800"
-                      disabled={workshop.availableSeats === 0 || !workshop.isOpen}
+                      disabled={availableSeats === 0 || !initialWorkshop.isOpen}
                     >
-                      {workshop.availableSeats === 0 ? "Sold Out" : "Proceed to Payment"} <ArrowRight className="ml-2 h-4 w-4" />
+                      {availableSeats === 0 ? "Sold Out" : "Proceed to Payment"} <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="bg-black border border-neutral-800 text-white sm:max-w-md p-0 gap-0">
                     <DialogHeader className="p-6 border-b border-neutral-800">
                       <DialogTitle className="uppercase font-black text-xl tracking-tight">Confirm Reservation</DialogTitle>
                       <DialogDescription className="text-neutral-400">
-                        {workshop.title} — {quantity} Seat(s)
+                        {initialWorkshop.title} — {quantity} Seat(s)
                       </DialogDescription>
                     </DialogHeader>
 

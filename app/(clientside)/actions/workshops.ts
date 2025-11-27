@@ -1,4 +1,3 @@
-// app/(clientside)/actions/workshops.ts
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -38,6 +37,23 @@ export async function GetWorkshopById(id: string) {
     return workshop;
   } catch (error) {
     console.error("Error fetching workshop:", error);
+    return null;
+  }
+}
+
+// NEW: Separate function to get only seat availability
+export async function GetWorkshopSeats(id: string) {
+  try {
+    const workshop = await prisma.workshop.findUnique({
+      where: { id },
+      select: {
+        availableSeats: true,
+        totalSeats: true,
+      },
+    });
+    return workshop;
+  } catch (error) {
+    console.error("Error fetching workshop seats:", error);
     return null;
   }
 }
@@ -157,9 +173,8 @@ export async function RegisterForWorkshop(
       return newRegistration;
     });
 
-    revalidatePath(`/workshops/${workshopId}`);
-    revalidatePath("/workshops");
-
+    // No revalidatePath here - seats will be fetched dynamically
+    
     return { success: true, registration };
   } catch (error) {
     console.error("Error registering for workshop:", error);
@@ -218,8 +233,7 @@ export async function CancelRegistration(workshopId: string) {
       });
     });
 
-    revalidatePath(`/workshops/${workshopId}`);
-    revalidatePath("/workshops");
+    // No revalidatePath here - seats will be fetched dynamically
 
     return { success: true };
   } catch (error) {

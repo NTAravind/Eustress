@@ -1,6 +1,6 @@
 "use server";
 
-import prisma  from "@/lib/prisma"; // Adjust your prisma import path
+import prisma from "@/lib/prisma";
 import { workshopSchema } from "@/lib/validations/workshop";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -57,11 +57,12 @@ export async function upsertWorkshop(
           updatedAt: new Date(),
         },
       });
+
+      // Revalidate specific workshop detail page
+      revalidatePath(`/workshops/${workshopId}`);
     } else {
       // --- CREATE ---
-      // Since your schema ID doesn't have a default, we generate one or rely on DB
-      // Usually Prisma schemas use @default(cuid()). Assuming uuid here:
-      await prisma.workshop.create({
+      const newWorkshop = await prisma.workshop.create({
         data: {
           id: crypto.randomUUID(),
           ...data,
@@ -69,6 +70,9 @@ export async function upsertWorkshop(
           updatedAt: new Date(),
         },
       });
+
+      // Revalidate the newly created workshop detail page
+      revalidatePath(`/workshops/${newWorkshop.id}`);
     }
   } catch (error) {
     console.error("Database Error:", error);
@@ -78,9 +82,11 @@ export async function upsertWorkshop(
     };
   }
 
+  // Revalidate workshops listing page
   revalidatePath("/workshops");
   redirect("/workshops");
 }
+
 export async function getWorkshops() {
   try {
     const workshops = await prisma.workshop.findMany({
@@ -94,11 +100,65 @@ export async function getWorkshops() {
       orderBy: {
         date: "desc",
       },
-    })
-
-    return workshops
+    });
+    return workshops;
   } catch (error) {
-    console.error("Failed to fetch workshops:", error)
-    throw new Error("Failed to fetch workshops")
+    console.error("Failed to fetch workshops:", error);
+    throw new Error("Failed to fetch workshops");
+  }
+}
+
+// Optional: Add delete action with revalidation
+export async function deleteWorkshop(workshopId: string): Promise<ActionState> {
+  try {
+    await prisma.workshop.delete({
+      where: { id: workshopId },
+    });
+
+    // Revalidate both listing and the deleted workshop page
+    revalidatePath("/workshops");
+    revalidatePath(`/workshops/${workshopId}`);
+
+    return {
+      status: "success",
+      message: "Workshop deleted successfully",
+    };
+  } catch (error) {
+    console.error("Database Error:", error);
+    return {
+      status: "error",
+      message: "Failed to delete workshop. Please try again.",
+    };
+  }
+}
+
+// Optional: Toggle workshop open/closed status
+export async function toggleWorkshopStatus(
+  workshopId: string,
+  isOpen: boolean
+): Promise<ActionState> {
+  try {
+    await prisma.workshop.update({
+      where: { id: workshopId },
+      data: {
+        isOpen,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Revalidate both listing and specific workshop page
+    revalidatePath("/workshops");
+    revalidatePath(`/workshops/${workshopId}`);
+
+    return {
+      status: "success",
+      message: `Workshop ${isOpen ? "opened" : "closed"} successfully`,
+    };
+  } catch (error) {
+    console.error("Database Error:", error);
+    return {
+      status: "error",
+      message: "Failed to update workshop status. Please try again.",
+    };
   }
 }
