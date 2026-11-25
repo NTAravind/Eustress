@@ -3,7 +3,7 @@ import { GetActiveWorkshops } from "../../actions/workshops";
 import { WorkshopCard } from "../../components/workcard";
 import { ArrowDown } from "lucide-react";
 
-
+export const dynamic = 'force-dynamic'
 
 export default async function Workshops() {
   const workshops = await GetActiveWorkshops();
